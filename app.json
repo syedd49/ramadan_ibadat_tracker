@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "Ramadan Ibadat Tracker",
+    "slug": "ramadan-ibadat-tracker",
+    "scheme": "ramadantracker",
+    "plugins": ["expo-router"],
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0E1A14"
+      }
+    }
+  }
+}

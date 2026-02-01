@@ -4,60 +4,53 @@ import { useCallback, useState } from "react";
 
 import { loadAllDailyIbadat } from "../../src/storage/localStorage";
 import { SALAH_LIST, IBADAT_LIST } from "../../src/constants/ibadat";
+import { getSmartReminder } from "../../src/ai/smartReminder";
 
 export default function HomeScreen() {
-  const [reflection, setReflection] = useState("");
-  const [insight, setInsight] = useState("");
+  const [aiMessage, setAiMessage] = useState("");
 
   useFocusEffect(
     useCallback(() => {
       (async () => {
         const all = await loadAllDailyIbadat();
-        const days = Object.keys(all).map(Number);
+        const days = Object.keys(all).map(Number).sort((a, b) => a - b);
 
-        let completedDays = 0;
-        let totalScore = 0;
-        let zikrMissCount = 0;
+        let todayScore = 0;
+        let streak = 0;
+        let missedIbadat: string[] = [];
 
-        days.forEach(day => {
-          let dayScore = 0;
-          [...SALAH_LIST, ...IBADAT_LIST].forEach(i => {
-            if (all[day][i.id]) {
-              dayScore += i.score;
-            } else if (i.id === "zikr") {
-              zikrMissCount++;
-            }
-          });
+        // Calculate today score (last active day)
+        const latestDay = days[days.length - 1];
+        const todayState = all[latestDay] ?? {};
 
-          if (dayScore > 0) completedDays++;
-          totalScore += dayScore;
+        [...SALAH_LIST, ...IBADAT_LIST].forEach(i => {
+          if (todayState[i.id]) {
+            todayScore += i.score;
+          } else {
+            missedIbadat.push(i.id);
+          }
         });
 
-        // 🟢 Reflection logic
-        if (completedDays === 0) {
-          setReflection(
-            "Aaj se shuru karna bhi ek ibadat hai. Allah niyyat ko dekhta hai 🤍"
-          );
-        } else if (completedDays >= 5) {
-          setReflection(
-            "Aap consistency bana rahe ho — Allah chhoti ibadat ko bhi pasand karta hai 🌙"
-          );
-        } else {
-          setReflection(
-            "Kabhi rukna failure nahi hota. Wapas uthna hi asal kamyabi hai ✨"
-          );
+        // Calculate streak
+        for (let i = days.length - 1; i >= 0; i--) {
+          const day = days[i];
+          let score = 0;
+
+          [...SALAH_LIST, ...IBADAT_LIST].forEach(it => {
+            if (all[day]?.[it.id]) score += it.score;
+          });
+
+          if (score > 0) streak++;
+          else break;
         }
 
-        // 🔵 Insight logic
-        if (zikrMissCount > completedDays) {
-          setInsight(
-            "Zikr thoda miss ho raha hai. Kya roz sirf 1 minute se shuru karein?"
-          );
-        } else {
-          setInsight(
-            "Aapka overall progress balanced lag raha hai. Is rhythm ko barkarar rakhein."
-          );
-        }
+        const message = getSmartReminder({
+          todayScore,
+          streak,
+          missedIbadat,
+        });
+
+        setAiMessage(message);
       })();
     }, [])
   );
@@ -69,24 +62,10 @@ export default function HomeScreen() {
         Aaj ki ibadat ka safar yahin se shuru hota hai
       </Text>
 
-      {/* 🟢 AI REFLECTION */}
-      <View style={styles.cardGreen}>
-        <Text style={styles.cardTitle}>AI Reflection</Text>
-        <Text style={styles.cardText}>{reflection}</Text>
-      </View>
-
-      {/* 🔵 AI INSIGHT */}
-      <View style={styles.cardBlue}>
-        <Text style={styles.cardTitle}>AI Insight</Text>
-        <Text style={styles.cardText}>{insight}</Text>
-      </View>
-
-      {/* 🟣 AI COMING SOON */}
-      <View style={styles.cardPurple}>
-        <Text style={styles.cardTitle}>Ask AI</Text>
-        <Text style={styles.cardText}>
-          Personal guidance & motivation (Coming Soon)
-        </Text>
+      {/* 🔔 AI SMART REMINDER */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>AI Smart Reminder</Text>
+        <Text style={styles.cardText}>{aiMessage}</Text>
       </View>
     </ScrollView>
   );
@@ -108,21 +87,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 20,
   },
-
-  cardGreen: {
+  card: {
     backgroundColor: "#1F7A4D",
-    padding: 18,
-    borderRadius: 16,
-    marginBottom: 14,
-  },
-  cardBlue: {
-    backgroundColor: "#1C3D5A",
-    padding: 18,
-    borderRadius: 16,
-    marginBottom: 14,
-  },
-  cardPurple: {
-    backgroundColor: "#3A2A4D",
     padding: 18,
     borderRadius: 16,
   },

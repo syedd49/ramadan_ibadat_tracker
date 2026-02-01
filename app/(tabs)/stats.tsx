@@ -1,104 +1,124 @@
-import { View, Text, StyleSheet, ScrollView } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Animated } from "react-native";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
-import Svg, { Rect } from "react-native-svg";
+import { useCallback, useRef, useState } from "react";
 
 import { loadAllDailyIbadat } from "../../src/storage/localStorage";
 import { SALAH_LIST, IBADAT_LIST } from "../../src/constants/ibadat";
+import { generateWeeklySummary } from "../../src/ai/weeklySummary";
+import { Screen } from "../../src/components/Screen";
+
+const MAX_BAR_HEIGHT = 150;
+const MIN_BAR_HEIGHT = 6;
 
 export default function StatsTab() {
   const [scores, setScores] = useState<number[]>([]);
-  const [streak, setStreak] = useState(0);
+  const [summary, setSummary] = useState("");
 
-  const MAX_BAR_HEIGHT = 150;
-  const MIN_BAR_HEIGHT = 6;
+  const animatedBars = useRef<Animated.Value[]>([]).current;
 
   useFocusEffect(
     useCallback(() => {
       (async () => {
         const all = await loadAllDailyIbadat();
 
-        const scoreByDay: Record<number, number> = {};
+        const days = Object.keys(all)
+          .map(Number)
+          .sort((a, b) => a - b);
+
         let lastActiveDay = 0;
+        const scoreByDay: Record<number, number> = {};
 
-        Object.keys(all).forEach(key => {
-          const day = Number(key);
+        days.forEach(day => {
           let total = 0;
-
           [...SALAH_LIST, ...IBADAT_LIST].forEach(i => {
-            if (all[day][i.id]) total += i.score;
+            if (all[day]?.[i.id]) total += i.score;
           });
-
           scoreByDay[day] = total;
-
-          if (total > 0 && day > lastActiveDay) {
-            lastActiveDay = day;
-          }
+          if (total > 0) lastActiveDay = Math.max(lastActiveDay, day);
         });
 
-        // build continuous timeline
         const timeline: number[] = [];
         for (let d = 1; d <= lastActiveDay; d++) {
           timeline.push(scoreByDay[d] ?? 0);
         }
 
-        // calculate streak
-        let currentStreak = 0;
-        for (let i = timeline.length - 1; i >= 0; i--) {
-          if (timeline[i] > 0) currentStreak++;
-          else break;
-        }
+        // weekly summary
+        const last7 = timeline.slice(-7);
+        let completed = last7.filter(s => s > 0).length;
+        let avg = last7.reduce((a, b) => a + b, 0) / Math.max(last7.length, 1);
+
+        setSummary(
+          generateWeeklySummary({
+            totalDays: last7.length,
+            completedDays: completed,
+            avgScore: avg,
+            mostMissed: null,
+          })
+        );
 
         setScores(timeline);
-        setStreak(currentStreak);
+
+        // setup animated values
+        animatedBars.length = 0;
+        timeline.forEach(() => animatedBars.push(new Animated.Value(0)));
+
+        // animate bars
+        Animated.stagger(
+          40,
+          animatedBars.map((anim, index) =>
+            Animated.timing(anim, {
+              toValue:
+                timeline[index] === 0
+                  ? MIN_BAR_HEIGHT
+                  : Math.max(
+                      (timeline[index] / 100) * MAX_BAR_HEIGHT,
+                      MIN_BAR_HEIGHT
+                    ),
+              duration: 600,
+              useNativeDriver: false,
+            })
+          )
+        ).start();
       })();
     }, [])
   );
 
-  const maxScore = Math.max(...scores, 100);
-
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.heading}>Progress</Text>
-      <Text style={styles.streak}>
-        🔥 Current Streak: {streak} days
-      </Text>
+    <Screen>
+      <ScrollView contentContainerStyle={styles.container}>
+        <Text style={styles.heading}>Weekly Summary 🧠</Text>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryText}>{summary}</Text>
+        </View>
 
-      <Svg height={180} width="100%">
-        {scores.map((score, index) => {
-          const isMissed = score === 0;
+        <Text style={styles.heading}>Progress</Text>
 
-          const barHeight = isMissed
-            ? MIN_BAR_HEIGHT
-            : Math.max(
-                (score / maxScore) * MAX_BAR_HEIGHT,
-                MIN_BAR_HEIGHT
-              );
+        <View style={styles.graph}>
+          {scores.map((score, index) => {
+            const isMissed = score === 0;
 
-          return (
-            <Rect
-              key={index}
-              x={index * 14}
-              y={160 - barHeight}
-              width={10}
-              height={barHeight}
-              fill={isMissed ? "#C0392B" : "#1F7A4D"}
-            />
-          );
-        })}
-      </Svg>
+            return (
+              <View key={index} style={styles.barWrapper}>
+                <Animated.View
+                  style={[
+                    styles.bar,
+                    {
+                      backgroundColor: isMissed ? "#C0392B" : "#1F7A4D",
+                      height: animatedBars[index] || MIN_BAR_HEIGHT,
+                    },
+                  ]}
+                />
+              </View>
+            );
+          })}
+        </View>
 
-      {/* LEGEND */}
-      <View style={styles.legend}>
-        <Legend color="#1F7A4D" label="Completed" />
-        <Legend color="#C0392B" label="Missed" />
-      </View>
-
-      <Text style={styles.caption}>
-        Your progress graph shows your commitment to Ramadan. Aim to maintain and improve your ibadat daily!
-        May Almighty Allah accept your efforts.
-      </Text>
-    </ScrollView>
+        <View style={styles.legend}>
+          <Legend color="#1F7A4D" label="Completed" />
+          <Legend color="#C0392B" label="Missed" />
+        </View>
+      </ScrollView>
+    </Screen>
   );
 }
 
@@ -113,30 +133,44 @@ function Legend({ color, label }: { color: string; label: string }) {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    backgroundColor: "#0E1A14",
     padding: 20,
   },
   heading: {
     color: "#F5F5DC",
     fontSize: 22,
     fontWeight: "bold",
+    marginBottom: 10,
   },
-  streak: {
-    color: "#1F7A4D",
-    fontSize: 18,
-    marginVertical: 10,
+  summaryCard: {
+    backgroundColor: "#1C3D5A",
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 20,
   },
-  caption: {
-    color: "#C7D2CC",
-    textAlign: "center",
-    marginTop: 8,
+  summaryText: {
+    color: "#F5F5DC",
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  graph: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    marginTop: 20,
+    marginBottom: 20,
+  },
+  barWrapper: {
+    width: 14,
+    alignItems: "center",
+    marginHorizontal: 2,
+  },
+  bar: {
+    width: 10,
+    borderRadius: 6,
   },
   legend: {
     flexDirection: "row",
     justifyContent: "center",
     gap: 16,
-    marginTop: 12,
   },
   legendItem: {
     flexDirection: "row",

@@ -1,122 +1,219 @@
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, ScrollView } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 
+import { Screen } from "../../src/components/Screen";
 import { loadAllDailyIbadat } from "../../src/storage/localStorage";
+import { getTasbeehHistory } from "../../src/storage/tasbeehStorage";
 import { SALAH_LIST, IBADAT_LIST } from "../../src/constants/ibadat";
-import { getRamadanDay } from "../../src/logic/date";
 
+/* ---------- DATE HELPERS ---------- */
+function dateKey(date: Date) {
+  return date.toISOString().split("T")[0];
+}
+
+function addDays(base: Date, offset: number) {
+  const d = new Date(base);
+  d.setDate(d.getDate() + offset);
+  return d;
+}
+
+/* ---------- MAIN ---------- */
 export default function SummaryTab() {
-  const [completedDays, setCompletedDays] = useState(0);
-  const [missedDays, setMissedDays] = useState(0);
-  const [avgScore, setAvgScore] = useState(0);
-  const [streak, setStreak] = useState(0);
+  const [daily, setDaily] = useState({ score: 0, tasbeeh: 0 });
+  const [weekly, setWeekly] = useState({
+    activeDays: 0,
+    totalScore: 0,
+    totalTasbeeh: 0,
+  });
+  const [monthly, setMonthly] = useState({
+    activeDays: 0,
+    totalScore: 0,
+    totalTasbeeh: 0,
+  });
 
   useFocusEffect(
     useCallback(() => {
       (async () => {
-        const all = await loadAllDailyIbadat();
-        const today = getRamadanDay() ?? 0;
+        const ibadatByDayIndex = await loadAllDailyIbadat();
+        const tasbeehHistory = await getTasbeehHistory();
 
-        const dayNumbers = Object.keys(all)
-          .map(Number)
-          .sort((a, b) => a - b);
+        /* ======================================
+           STEP 1: BUILD DATE → IBADAT SCORE MAP
+        ====================================== */
+        const scoreByDate: Record<string, number> = {};
 
-        const scores = dayNumbers.map((day) => {
-          let total = 0;
-          [...SALAH_LIST, ...IBADAT_LIST].forEach((i) => {
-            if (all[day][i.id]) total += i.score;
+        Object.keys(ibadatByDayIndex).forEach(dayIndexStr => {
+          const dayIndex = Number(dayIndexStr);
+
+          // Assume day 1 = app start date
+          const appStartDate = new Date();
+          appStartDate.setDate(
+            appStartDate.getDate() - (dayIndex - 1)
+          );
+
+          const key = dateKey(appStartDate);
+
+          let score = 0;
+          [...SALAH_LIST, ...IBADAT_LIST].forEach(i => {
+            if (ibadatByDayIndex[dayIndex]?.[i.id]) {
+              score += i.score;
+            }
           });
-          return { day, total };
+
+          scoreByDate[key] = score;
         });
 
-        const completed = scores.filter((d) => d.total > 0).length;
-        const average =
-          scores.reduce((a, b) => a + b.total, 0) /
-          (scores.length || 1);
+        /* ======================================
+           TODAY
+        ====================================== */
+        const todayKey = dateKey(new Date());
 
-        // streak calculation (from latest backwards)
-        let currentStreak = 0;
-        for (let d = today; d >= 1; d--) {
-          const found = scores.find((s) => s.day === d);
-          if (found && found.total > 0) currentStreak++;
-          else break;
+        const todayScore = scoreByDate[todayKey] || 0;
+        const todayTasbeeh = tasbeehHistory[todayKey]
+          ? Object.values(tasbeehHistory[todayKey]).reduce(
+              (a, b) => a + b,
+              0
+            )
+          : 0;
+
+        setDaily({
+          score: todayScore,
+          tasbeeh: todayTasbeeh,
+        });
+
+        /* ======================================
+           WEEK (LAST 7 DAYS INCLUDING TODAY)
+        ====================================== */
+        let weekScore = 0;
+        let weekTasbeeh = 0;
+        let weekActiveDays = 0;
+
+        for (let i = 0; i < 7; i++) {
+          const d = dateKey(addDays(new Date(), -i));
+          const s = scoreByDate[d] || 0;
+
+          if (s > 0) weekActiveDays++;
+          weekScore += s;
+
+          if (tasbeehHistory[d]) {
+            weekTasbeeh += Object.values(
+              tasbeehHistory[d]
+            ).reduce((a, b) => a + b, 0);
+          }
         }
 
-        setCompletedDays(completed);
-        setMissedDays(Math.max(0, today - completed));
-        setAvgScore(Math.round(average));
-        setStreak(currentStreak);
+        setWeekly({
+          activeDays: weekActiveDays,
+          totalScore: weekScore,
+          totalTasbeeh: weekTasbeeh,
+        });
+
+        /* ======================================
+           MONTH (CURRENT MONTH)
+        ====================================== */
+        const currentMonth =
+          todayKey.slice(0, 7); // YYYY-MM
+
+        let monthScore = 0;
+        let monthTasbeeh = 0;
+        let monthActiveDays = 0;
+
+        Object.keys(scoreByDate)
+          .filter(d => d.startsWith(currentMonth))
+          .forEach(d => {
+            const s = scoreByDate[d];
+            if (s > 0) monthActiveDays++;
+            monthScore += s;
+
+            if (tasbeehHistory[d]) {
+              monthTasbeeh += Object.values(
+                tasbeehHistory[d]
+              ).reduce((a, b) => a + b, 0);
+            }
+          });
+
+        setMonthly({
+          activeDays: monthActiveDays,
+          totalScore: monthScore,
+          totalTasbeeh: monthTasbeeh,
+        });
       })();
     }, [])
   );
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.heading}>Ramadan Summary 🌙</Text>
+    <Screen>
+      <ScrollView contentContainerStyle={styles.container}>
+        <Section title="Today 📅">
+          <Item label="Ibadat Score" value={daily.score} />
+          <Item label="Tasbeeh Count" value={daily.tasbeeh} />
+        </Section>
 
-      <Stat label="Completed Days" value={completedDays} />
-      <Stat label="Missed Days" value={missedDays} />
-      <Stat label="Final Streak" value={`${streak} days`} />
-      <Stat label="Average Score" value={`${avgScore} / 100`} />
+        <Section title="This Week 📊">
+          <Item label="Active Days" value={weekly.activeDays} />
+          <Item label="Total Score" value={weekly.totalScore} />
+          <Item label="Total Tasbeeh" value={weekly.totalTasbeeh} />
+        </Section>
 
-      <View style={styles.reflectionBox}>
-        <Text style={styles.reflection}>
-          Ramadan is about consistency, not perfection. Carry what you built
-          forward 🤍
-        </Text>
-      </View>
-    </View>
+        <Section title="This Month 🌙">
+          <Item label="Active Days" value={monthly.activeDays} />
+          <Item label="Total Score" value={monthly.totalScore} />
+          <Item label="Total Tasbeeh" value={monthly.totalTasbeeh} />
+        </Section>
+      </ScrollView>
+    </Screen>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string | number }) {
+/* ---------- UI HELPERS ---------- */
+
+function Section({ title, children }: any) {
   return (
-    <View style={styles.stat}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>{value}</Text>
+    <View style={styles.section}>
+      <Text style={styles.heading}>{title}</Text>
+      {children}
     </View>
   );
 }
+
+function Item({ label, value }: any) {
+  return (
+    <View style={styles.row}>
+      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.value}>{value}</Text>
+    </View>
+  );
+}
+
+/* ---------- STYLES ---------- */
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#0E1A14",
-    padding: 20,
+  container: { padding: 20 },
+  section: {
+    backgroundColor: "#162922",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
   },
   heading: {
     color: "#F5F5DC",
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 20,
-  },
-  stat: {
-    backgroundColor: "#162922",
-    padding: 16,
-    borderRadius: 14,
     marginBottom: 12,
   },
-  statLabel: {
+  row: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginVertical: 6,
+  },
+  label: {
     color: "#C7D2CC",
     fontSize: 14,
   },
-  statValue: {
+  value: {
     color: "#1F7A4D",
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  reflectionBox: {
-    backgroundColor: "#12251F",
-    padding: 18,
-    borderRadius: 16,
-    marginTop: 20,
-  },
-  reflection: {
-    color: "#E0EDE7",
     fontSize: 16,
-    lineHeight: 22,
-    textAlign: "center",
+    fontWeight: "600",
   },
 });

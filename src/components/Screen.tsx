@@ -1,26 +1,22 @@
 import { View, StyleSheet } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ReactNode } from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-export function Screen({ children }: { children: React.ReactNode }) {
-  const insets = useSafeAreaInsets();
-
+export function Screen({ children }: { children: ReactNode }) {
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          paddingTop: insets.top + 12, // ✅ FINAL FIX
-        },
-      ]}
-    >
-      {children}
-    </View>
+    <SafeAreaView style={styles.safe} edges={["top"]}>
+      <View style={styles.container}>{children}</View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safe: {
     flex: 1,
     backgroundColor: "#0E1A14",
+  },
+  container: {
+    flex: 1,
+    paddingTop: 16, // ✅ STANDARD TOP SPACING (FINAL FIX)
   },
 });

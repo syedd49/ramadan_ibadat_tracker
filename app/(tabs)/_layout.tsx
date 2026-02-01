@@ -11,7 +11,6 @@ export default function TabsLayout() {
       screenOptions={({ route }) => ({
         headerShown: false,
 
-        // ✅ THIS IS THE FIX
         sceneContainerStyle: {
           paddingTop:
             Platform.OS === "android"
@@ -45,6 +44,9 @@ export default function TabsLayout() {
             case "ai-chat":
               iconName = "chatbubble-ellipses";
               break;
+            case "tasbeeh":
+              iconName = "add-circle";
+              break;
             default:
               iconName = "ellipse";
           }
@@ -58,6 +60,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="calendar" options={{ title: "Calendar" }} />
       <Tabs.Screen name="stats" options={{ title: "Stats" }} />
       <Tabs.Screen name="ai-chat" options={{ title: "AI" }} />
+      <Tabs.Screen name="tasbeeh" options={{ title: "Tasbeeh" }} />
     </Tabs>
   );
 }

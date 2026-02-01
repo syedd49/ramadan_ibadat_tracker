@@ -1,26 +1,39 @@
-import { View, Text, StyleSheet, ScrollView, Animated } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Animated,
+} from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 
+import { Screen } from "../../src/components/Screen";
 import { loadAllDailyIbadat } from "../../src/storage/localStorage";
 import { SALAH_LIST, IBADAT_LIST } from "../../src/constants/ibadat";
+import { getTasbeehHistory } from "../../src/storage/tasbeehStorage";
 import { generateWeeklySummary } from "../../src/ai/weeklySummary";
-import { Screen } from "../../src/components/Screen";
 
-const MAX_BAR_HEIGHT = 150;
-const MIN_BAR_HEIGHT = 6;
+/* ---------- CONFIG ---------- */
+const MAX_IBADAT_BAR = 150;
+const MIN_BAR = 6;
+const MAX_TASBEEH_BAR = 160;
 
 export default function StatsTab() {
-  const [scores, setScores] = useState<number[]>([]);
+  const [ibadatScores, setIbadatScores] = useState<number[]>([]);
+  const [tasbeehScores, setTasbeehScores] = useState<number[]>([]);
   const [summary, setSummary] = useState("");
 
-  const animatedBars = useRef<Animated.Value[]>([]).current;
+  const ibadatBars = useRef<Animated.Value[]>([]).current;
+  const tasbeehBars = useRef<Animated.Value[]>([]).current;
 
   useFocusEffect(
     useCallback(() => {
       (async () => {
+        /* ===============================
+           IBADAT / SALAH GRAPH
+        =============================== */
         const all = await loadAllDailyIbadat();
-
         const days = Object.keys(all)
           .map(Number)
           .sort((a, b) => a - b);
@@ -37,48 +50,106 @@ export default function StatsTab() {
           if (total > 0) lastActiveDay = Math.max(lastActiveDay, day);
         });
 
-        const timeline: number[] = [];
+        const ibadatTimeline: number[] = [];
         for (let d = 1; d <= lastActiveDay; d++) {
-          timeline.push(scoreByDay[d] ?? 0);
+          ibadatTimeline.push(scoreByDay[d] ?? 0);
         }
 
-        // weekly summary
-        const last7 = timeline.slice(-7);
-        let completed = last7.filter(s => s > 0).length;
-        let avg = last7.reduce((a, b) => a + b, 0) / Math.max(last7.length, 1);
+        setIbadatScores(ibadatTimeline);
 
-        setSummary(
-          generateWeeklySummary({
-            totalDays: last7.length,
-            completedDays: completed,
-            avgScore: avg,
-            mostMissed: null,
-          })
+        ibadatBars.length = 0;
+        ibadatTimeline.forEach(() =>
+          ibadatBars.push(new Animated.Value(0))
         );
 
-        setScores(timeline);
-
-        // setup animated values
-        animatedBars.length = 0;
-        timeline.forEach(() => animatedBars.push(new Animated.Value(0)));
-
-        // animate bars
         Animated.stagger(
           40,
-          animatedBars.map((anim, index) =>
+          ibadatBars.map((anim, i) =>
             Animated.timing(anim, {
               toValue:
-                timeline[index] === 0
-                  ? MIN_BAR_HEIGHT
+                ibadatTimeline[i] === 0
+                  ? MIN_BAR
                   : Math.max(
-                      (timeline[index] / 100) * MAX_BAR_HEIGHT,
-                      MIN_BAR_HEIGHT
+                      (ibadatTimeline[i] / 100) *
+                        MAX_IBADAT_BAR,
+                      MIN_BAR
                     ),
               duration: 600,
               useNativeDriver: false,
             })
           )
         ).start();
+
+        /* ===============================
+           TASBEEH GRAPH (FIXED)
+        =============================== */
+        const tasbeehHistory =
+          await getTasbeehHistory();
+
+        const tasbeehDays = Object.keys(
+          tasbeehHistory
+        )
+          .sort()
+          .slice(-7);
+
+        // 🔥 TOTAL per day (sum of all tasbeeh)
+        const tasbeehTotals = tasbeehDays.map(
+          day =>
+            Object.values(
+              tasbeehHistory[day]
+            ).reduce((a, b) => a + b, 0)
+        );
+
+        setTasbeehScores(tasbeehTotals);
+
+        tasbeehBars.length = 0;
+        tasbeehTotals.forEach(() =>
+          tasbeehBars.push(new Animated.Value(0))
+        );
+
+        Animated.stagger(
+          50,
+          tasbeehBars.map((anim, i) =>
+            Animated.timing(anim, {
+              toValue: Math.min(
+                tasbeehTotals[i],
+                MAX_TASBEEH_BAR
+              ),
+              duration: 600,
+              useNativeDriver: false,
+            })
+          )
+        ).start();
+
+        /* ===============================
+           WEEKLY SUMMARY
+        =============================== */
+        const last7Ibadat = ibadatTimeline.slice(
+          -7
+        );
+        const completedDays =
+          last7Ibadat.filter(v => v > 0).length;
+
+        const avgScore =
+          last7Ibadat.reduce((a, b) => a + b, 0) /
+          Math.max(last7Ibadat.length, 1);
+
+        const totalTasbeeh =
+          tasbeehTotals.reduce(
+            (a, b) => a + b,
+            0
+          );
+
+        const text =
+          generateWeeklySummary({
+            totalDays: last7Ibadat.length,
+            completedDays,
+            avgScore,
+            mostMissed: null,
+          }) +
+          `\n\n📿 Is hafte aapne total ${totalTasbeeh} tasbeeh padhi.`;
+
+        setSummary(text);
       })();
     }, [])
   );
@@ -86,55 +157,71 @@ export default function StatsTab() {
   return (
     <Screen>
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.heading}>Weekly Summary 🧠</Text>
+        {/* SUMMARY */}
+        <Text style={styles.heading}>
+          Weekly Summary 🧠
+        </Text>
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryText}>{summary}</Text>
+          <Text style={styles.summaryText}>
+            {summary}
+          </Text>
         </View>
 
-        <Text style={styles.heading}>Progress</Text>
-
+        {/* IBADAT GRAPH */}
+        <Text style={styles.heading}>
+          Ibadat Progress
+        </Text>
         <View style={styles.graph}>
-          {scores.map((score, index) => {
-            const isMissed = score === 0;
-
-            return (
-              <View key={index} style={styles.barWrapper}>
-                <Animated.View
-                  style={[
-                    styles.bar,
-                    {
-                      backgroundColor: isMissed ? "#C0392B" : "#1F7A4D",
-                      height: animatedBars[index] || MIN_BAR_HEIGHT,
-                    },
-                  ]}
-                />
-              </View>
-            );
-          })}
+          {ibadatScores.map((_, i) => (
+            <View key={i} style={styles.barWrap}>
+              <Animated.View
+                style={[
+                  styles.bar,
+                  {
+                    height:
+                      ibadatBars[i] || MIN_BAR,
+                    backgroundColor:
+                      ibadatScores[i] === 0
+                        ? "#C0392B"
+                        : "#1F7A4D",
+                  },
+                ]}
+              />
+            </View>
+          ))}
         </View>
 
-        <View style={styles.legend}>
-          <Legend color="#1F7A4D" label="Completed" />
-          <Legend color="#C0392B" label="Missed" />
+        {/* TASBEEH GRAPH */}
+        <Text style={styles.heading}>
+          Tasbeeh (Last 7 Days) 📿
+        </Text>
+        <View style={styles.graph}>
+          {tasbeehScores.map((v, i) => (
+            <View key={i} style={styles.barWrap}>
+              <Animated.View
+                style={[
+                  styles.bar,
+                  {
+                    height:
+                      tasbeehBars[i] || MIN_BAR,
+                    backgroundColor:
+                      "#2ECC71",
+                  },
+                ]}
+              />
+              <Text style={styles.smallLabel}>
+                {v}
+              </Text>
+            </View>
+          ))}
         </View>
       </ScrollView>
     </Screen>
   );
 }
 
-function Legend({ color, label }: { color: string; label: string }) {
-  return (
-    <View style={styles.legendItem}>
-      <View style={[styles.legendDot, { backgroundColor: color }]} />
-      <Text style={styles.legendText}>{label}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-  },
+  container: { padding: 20 },
   heading: {
     color: "#F5F5DC",
     fontSize: 22,
@@ -145,7 +232,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#1C3D5A",
     padding: 16,
     borderRadius: 16,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   summaryText: {
     color: "#F5F5DC",
@@ -155,35 +242,20 @@ const styles = StyleSheet.create({
   graph: {
     flexDirection: "row",
     alignItems: "flex-end",
-    marginTop: 20,
-    marginBottom: 20,
+    marginBottom: 24,
   },
-  barWrapper: {
+  barWrap: {
     width: 14,
     alignItems: "center",
-    marginHorizontal: 2,
+    marginHorizontal: 3,
   },
   bar: {
     width: 10,
     borderRadius: 6,
   },
-  legend: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 16,
-  },
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  legendDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 6,
-  },
-  legendText: {
+  smallLabel: {
     color: "#C7D2CC",
-    fontSize: 12,
+    fontSize: 10,
+    marginTop: 4,
   },
 });

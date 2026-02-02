@@ -2,164 +2,109 @@ import {
   View,
   Text,
   StyleSheet,
+  ScrollView,
   TextInput,
   Pressable,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-  Switch,
 } from "react-native";
-import { useState, useRef, useEffect } from "react";
-import { router } from "expo-router";
+import { useState } from "react";
 
 import { Screen } from "../../src/components/Screen";
-import { getAIReply } from "../../src/ai/chatEngine";
-import { detectCurrentNamaz } from "../../src/ai/namazDetector";
+import {
+  ChatMessage,
+  getAIReply,
+} from "../../src/ai/chatEngine";
 
-type Message = {
-  from: "user" | "ai";
-  text: string;
-  hasCitation?: boolean;
-  citationType?: "quran" | "hadith";
-};
-
-export default function AIChatScreen() {
-  const [input, setInput] = useState("");
-  const [showCitations, setShowCitations] = useState(true);
-
-  const [messages, setMessages] = useState<Message[]>([
+export default function AIChatTab() {
+  const [messages, setMessages] = useState<ChatMessage[]>([
     {
-      from: "ai",
+      role: "assistant",
       text:
-        "Assalamu Alaikum 🌙\n\n" +
-        "Aap tasbeeh, zikr, dua ya apna haal likh sakte ho.\n" +
-        "Upar toggle se Qur’an / Hadith citations control kar sakte ho.",
+        "Assalamu alaikum. Aaj ibadat ke baare me kaisa mehsoos kar rahe ho?",
     },
   ]);
 
-  const scrollRef = useRef<ScrollView>(null);
+  const [input, setInput] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
 
-  const send = () => {
-    if (!input.trim()) return;
+  const send = async () => {
+    if (!input.trim() || loading) return;
 
-    const currentNamaz = detectCurrentNamaz();
-
-    const userMsg: Message = {
-      from: "user",
+    const userMessage: ChatMessage = {
+      role: "user",
       text: input,
     };
 
-    const aiText = getAIReply(input, {
-      lastNamaz: currentNamaz,
-      showCitations,
-    });
+    const updatedHistory: ChatMessage[] = [
+      ...messages,
+      userMessage,
+    ];
 
-    // ✅ reliable citation detection
-    const hasCitation =
-      showCitations &&
-      (aiText.includes("﴿") || aiText.includes("﴾") || aiText.includes("Surah") || aiText.includes("Bukhari") || aiText.includes("Muslim"));
-
-    const citationType: "quran" | "hadith" | undefined =
-      aiText.includes("﴿") || aiText.includes("﴾") || aiText.includes("Surah")
-        ? "quran"
-        : aiText.includes("Bukhari") || aiText.includes("Muslim")
-        ? "hadith"
-        : undefined;
-
-    const aiMsg: Message = {
-      from: "ai",
-      text: aiText,
-      hasCitation,
-      citationType,
-    };
-
-    setMessages(prev => [...prev, userMsg, aiMsg]);
+    setMessages(updatedHistory);
     setInput("");
-  };
+    setLoading(true);
 
-  useEffect(() => {
-    scrollRef.current?.scrollToEnd({ animated: true });
-  }, [messages]);
+    try {
+      const reply = await getAIReply(updatedHistory);
+
+      setMessages([
+        ...updatedHistory,
+        { role: "assistant", text: reply },
+      ]);
+    } catch {
+      setMessages([
+        ...updatedHistory,
+        {
+          role: "assistant",
+          text:
+            "Thodi der ke liye main available nahi hoon. Thoda baad try karein.",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <Screen>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
-      >
-        <View style={styles.container}>
-          {/* 🔘 TOGGLE BAR */}
-          <View style={styles.toggleBar}>
-            <Text style={styles.toggleText}>
-              Qur’an / Hadith citations
+      <View style={styles.container}>
+        <ScrollView
+          style={styles.chat}
+          contentContainerStyle={{ paddingBottom: 20 }}
+        >
+          {messages.map((m, i) => (
+            <View
+              key={i}
+              style={[
+                styles.bubble,
+                m.role === "assistant"
+                  ? styles.ai
+                  : styles.user,
+              ]}
+            >
+              <Text style={styles.text}>{m.text}</Text>
+            </View>
+          ))}
+
+          {loading && (
+            <Text style={styles.typing}>
+              AI soch raha hai…
             </Text>
-            <Switch
-              value={showCitations}
-              onValueChange={setShowCitations}
-              trackColor={{ false: "#555", true: "#1F7A4D" }}
-              thumbColor="#F5F5DC"
-            />
-          </View>
+          )}
+        </ScrollView>
 
-          {/* 💬 CHAT */}
-          <ScrollView
-            ref={scrollRef}
-            style={styles.chat}
-            contentContainerStyle={styles.chatContent}
-            keyboardShouldPersistTaps="handled"
-          >
-            {messages.map((m, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.bubble,
-                  m.from === "user"
-                    ? styles.user
-                    : styles.ai,
-                ]}
-              >
-                <Text style={styles.text}>{m.text}</Text>
-
-                {m.from === "ai" && m.hasCitation && (
-                  <Text
-                    style={styles.link}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/citation",
-                        params: {
-                          type: m.citationType ?? "quran",
-                          reference:
-                            m.citationType === "hadith"
-                              ? "Sahih Hadith Collections"
-                              : "Al-Qur’an",
-                        },
-                      })
-                    }
-                  >
-                    View source →
-                  </Text>
-                )}
-              </View>
-            ))}
-          </ScrollView>
-
-          {/* ⌨️ INPUT */}
-          <View style={styles.inputBar}>
-            <TextInput
-              value={input}
-              onChangeText={setInput}
-              placeholder="Tasbeeh, zikr ya sawal likhiye…"
-              placeholderTextColor="#889D92"
-              style={styles.input}
-              multiline
-            />
-            <Pressable style={styles.send} onPress={send}>
-              <Text style={styles.sendText}>Send</Text>
-            </Pressable>
-          </View>
+        <View style={styles.inputRow}>
+          <TextInput
+            value={input}
+            onChangeText={setInput}
+            placeholder="Type here..."
+            placeholderTextColor="#9FB9B2"
+            style={styles.input}
+          />
+          <Pressable onPress={send} style={styles.send}>
+            <Text style={styles.sendText}>Send</Text>
+          </Pressable>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Screen>
   );
 }
@@ -167,75 +112,63 @@ export default function AIChatScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
 
-  toggleBar: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1F7A4D",
-  },
-  toggleText: {
-    color: "#F5F5DC",
-    fontSize: 14,
-  },
+  chat: { padding: 16 },
 
-  chat: { flex: 1 },
-  chatContent: {
-    padding: 16,
-    paddingBottom: 20,
-  },
   bubble: {
+    maxWidth: "80%",
     padding: 12,
     borderRadius: 14,
-    marginVertical: 6,
-    maxWidth: "80%",
+    marginBottom: 10,
   },
+
   ai: {
-    backgroundColor: "#1C3D5A",
+    backgroundColor: "#1B2F26",
     alignSelf: "flex-start",
   },
+
   user: {
-    backgroundColor: "#1F7A4D",
+    backgroundColor: "#4AA3DF",
     alignSelf: "flex-end",
   },
+
   text: {
     color: "#F5F5DC",
     fontSize: 14,
     lineHeight: 20,
   },
-  link: {
-    color: "#A6E3C3",
+
+  typing: {
+    color: "#9FB9B2",
     fontSize: 12,
     marginTop: 6,
   },
 
-  inputBar: {
+  inputRow: {
     flexDirection: "row",
-    padding: 10,
+    padding: 12,
     borderTopWidth: 1,
-    borderTopColor: "#1F7A4D",
-    backgroundColor: "#0E1A14",
+    borderColor: "#1B2F26",
   },
+
   input: {
     flex: 1,
-    backgroundColor: "#162922",
+    backgroundColor: "#12251E",
+    color: "#F5F5DC",
     borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    color: "#FFFFFF",
-    maxHeight: 120,
+    height: 44,
   },
+
   send: {
-    marginLeft: 8,
-    backgroundColor: "#1F7A4D",
+    marginLeft: 10,
+    backgroundColor: "#4AA3DF",
+    borderRadius: 12,
     paddingHorizontal: 16,
     justifyContent: "center",
-    borderRadius: 12,
   },
+
   sendText: {
     color: "#FFFFFF",
-    fontWeight: "600",
+    fontWeight: "700",
   },
 });

@@ -1,71 +1,87 @@
-import { ISLAMIC_LIBRARY, IslamicContent } from "./islamicData";
-import { getTasbeehSuggestion } from "./tasbeehSuggestion";
+import { generateDailyInsight } from "./insightEngine";
 
-function pickRandom(arr: IslamicContent[]) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
+/* 🔐 TYPES */
+export type ChatRole = "user" | "assistant";
 
-type AIContext = {
-  lastNamaz?: string;
-  showCitations?: boolean;
+export type ChatMessage = {
+  role: ChatRole;
+  text: string;
 };
 
-export function getAIReply(
-  userMessage: string,
-  context?: AIContext
-): string {
-  const text = userMessage.toLowerCase();
+/* 🔧 FEATURE FLAG */
+const USE_LOCAL_AI = true;
 
-  // 🔔 Tasbeeh suggestion (namaz-based)
-  if (
-    context?.lastNamaz &&
-    (text.includes("tasbeeh") ||
-      text.includes("zikr"))
-  ) {
-    return getTasbeehSuggestion(
-      context.lastNamaz as any
-    );
+/* Ollama config */
+const OLLAMA_URL = "http://localhost:11434/api/generate";
+const OLLAMA_MODEL = "phi3:mini";
+
+/* 🧠 MAIN FUNCTION — THIS WAS MISSING */
+export async function getAIReply(
+  history: ChatMessage[]
+): Promise<string> {
+  // Fallback if AI off
+  if (!USE_LOCAL_AI) {
+    return fallbackReply(history);
   }
 
-  let bucket: IslamicContent[];
+  try {
+    const prompt = buildChatPrompt(history);
 
-  if (
-    text.includes("miss") ||
-    text.includes("gunah") ||
-    text.includes("fail")
-  ) {
-    bucket = ISLAMIC_LIBRARY.missed;
-  } else if (
-    text.includes("tired") ||
-    text.includes("lazy") ||
-    text.includes("thak")
-  ) {
-    bucket = ISLAMIC_LIBRARY.tired;
-  } else if (text.includes("dua")) {
-    bucket = ISLAMIC_LIBRARY.dua;
-  } else {
-    bucket = ISLAMIC_LIBRARY.default;
-  }
+    const res = await fetch(OLLAMA_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        prompt,
+        stream: false,
+      }),
+    });
 
-  const content = pickRandom(bucket);
-
-  // 🧠 BUILD RESPONSE BASED ON TOGGLE
-  let reply = "";
-
-  if (context?.showCitations) {
-    if (content.ayah) {
-      reply += `${content.ayah.arabic}\n\n`;
-      reply += `“${content.ayah.meaning}”\n`;
-      reply += `(${content.ayah.ref})\n\n`;
+    if (!res.ok) {
+      throw new Error("AI request failed");
     }
 
-    if (content.hadith) {
-      reply += `${content.hadith.text}\n`;
-      reply += `(${content.hadith.ref})\n\n`;
+    const data = await res.json();
+
+    if (typeof data?.response === "string") {
+      return data.response.trim();
     }
+
+    throw new Error("Invalid AI response");
+  } catch {
+    // ❌ AI fail → SAFE fallback
+    return fallbackReply(history);
+  }
+}
+
+/* 🧠 PROMPT BUILDER */
+function buildChatPrompt(history: ChatMessage[]): string {
+  return `
+You are a gentle Islamic habit coach.
+
+Rules:
+- No fatwa
+- No judgement
+- No Quran/Hadith invention
+- Short, conversational replies
+- Ask one follow-up question
+
+Conversation:
+${history.map(h => `${h.role}: ${h.text}`).join("\n")}
+
+Assistant:
+`.trim();
+}
+
+/* 🔄 FALLBACK (no AI dependency) */
+function fallbackReply(history: ChatMessage[]): string {
+  const lastUser = [...history]
+    .reverse()
+    .find(h => h.role === "user");
+
+  if (!lastUser) {
+    return "Aaj ibadat ke baare me kya mehsoos kar rahe ho?";
   }
 
-  reply += content.tafseer;
-
-  return reply;
+  return `Samajh raha hoon. Isme sabse mushkil part kya lag raha hai?`;
 }

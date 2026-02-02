@@ -1,124 +1,193 @@
-import { View, Text, StyleSheet, FlatList } from "react-native";
-import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  Animated,
+  Dimensions,
+} from "react-native";
+import { useEffect, useRef, useState } from "react";
 
+import { Screen } from "../../src/components/Screen";
+import { useDay } from "../../src/context/DayContext";
 import { loadAllDailyIbadat } from "../../src/storage/localStorage";
 import { SALAH_LIST, IBADAT_LIST } from "../../src/constants/ibadat";
-import { useDay } from "../../src/context/DayContext";
+import { useLang } from "../../src/context/LanguageContext";
 
-type DayItem = {
-  day: number;
-  score: number;
-};
+type ScoreMap = Record<number, number>;
 
-const NUM_COLUMNS = 5;
+const { width } = Dimensions.get("window");
+
+// 🔥 Screen-fit math (tabs safe)
+const H_PADDING = 32; // container padding * 2
+const GAP = 12;
+const COLUMNS = 4.5;
+
+const BOX_SIZE =
+  (width - H_PADDING - GAP * (COLUMNS - 1)) / COLUMNS;
 
 export default function CalendarTab() {
-  const { selectedDay } = useDay();
-  const [days, setDays] = useState<DayItem[]>([]);
-  const listRef = useRef<FlatList<DayItem>>(null);
+  const { day: selectedDay, setDay } = useDay();
+  const { lang } = useLang();
+  const isRTL = lang === "ur";
 
-  useFocusEffect(
-    useCallback(() => {
-      (async () => {
-        const all = await loadAllDailyIbadat();
+  const [scores, setScores] = useState<ScoreMap>({});
 
-        const result: DayItem[] = Array.from({ length: 30 }, (_, i) => {
-          const day = i + 1;
-          const state = all[day] ?? {};
-          let score = 0;
+  const scaleRefs = useRef(
+    Array.from({ length: 30 }, () => new Animated.Value(1))
+  ).current;
 
-          [...SALAH_LIST, ...IBADAT_LIST].forEach(item => {
-            if (state[item.id]) score += item.score;
-          });
+  // 🔹 Load scores
+  useEffect(() => {
+    (async () => {
+      const all = await loadAllDailyIbadat();
+      const map: ScoreMap = {};
 
-          return { day, score };
+      Object.keys(all).forEach(key => {
+        const d = Number(key);
+        if (!Number.isFinite(d)) return;
+
+        let score = 0;
+        [...SALAH_LIST, ...IBADAT_LIST].forEach(i => {
+          if (all[d]?.[i.id]) score += i.score;
         });
 
-        setDays(result);
-      })();
-    }, [])
-  );
+        map[d] = score;
+      });
 
-  // ✅ CORRECT SCROLL FOR numColumns
-  useEffect(() => {
-    if (!listRef.current) return;
-    if (days.length === 0) return;
+      setScores(map);
+    })();
+  }, [selectedDay]);
 
-    const maxRowIndex = Math.ceil(days.length / NUM_COLUMNS) - 1;
-    const targetRow = Math.floor((selectedDay - 1) / NUM_COLUMNS);
+  const animatePress = (i: number) => {
+    Animated.sequence([
+      Animated.spring(scaleRefs[i], {
+        toValue: 0.92,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleRefs[i], {
+        toValue: 1,
+        friction: 4,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
 
-    if (targetRow < 0 || targetRow > maxRowIndex) return;
+  const getDayStyle = (d: number) => {
+    const score = scores[d] ?? 0;
 
-    listRef.current.scrollToIndex({
-      index: targetRow,
-      animated: true,
-    });
-  }, [selectedDay, days]);
+    if (d === selectedDay) return styles.selected;
+    if (score > 0) return styles.completed;
+    if (d < selectedDay && score === 0) return styles.missed;
 
-  const renderItem = ({ item }: { item: DayItem }) => {
-    const isActive = item.day === selectedDay;
-
-    return (
-      <View style={[styles.dayBox, isActive && styles.activeBox]}>
-        <Text style={styles.dayText}>{item.day}</Text>
-        <Text style={styles.scoreText}>{item.score}</Text>
-      </View>
-    );
+    return styles.neutral;
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.heading}>Ramadan Calendar 🌙</Text>
+    <Screen>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ paddingBottom: 40 }}
+      >
+        <Text
+          style={[
+            styles.heading,
+            { textAlign: isRTL ? "right" : "left" },
+          ]}
+        >
+          Ramadan Days
+        </Text>
 
-      <FlatList
-        ref={listRef}
-        data={days}
-        numColumns={NUM_COLUMNS}
-        keyExtractor={item => item.day.toString()}
-        renderItem={renderItem}
-        onScrollToIndexFailed={() => {
-          // Safe fallback, no crash
-        }}
-      />
-    </View>
+        <View style={styles.grid}>
+          {Array.from({ length: 30 }).map((_, i) => {
+            const d = i + 1;
+            const score = scores[d] ?? 0;
+
+            return (
+              <Pressable
+                key={d}
+                onPress={() => {
+                  animatePress(i);
+                  setDay(d);
+                }}
+              >
+                <Animated.View
+                  style={[
+                    styles.dayBox,
+                    getDayStyle(d),
+                    { transform: [{ scale: scaleRefs[i] }] },
+                  ]}
+                >
+                  <Text style={styles.dayNumber}>{d}</Text>
+                  {score > 0 && (
+                    <Text style={styles.scoreText}>{score}</Text>
+                  )}
+                </Animated.View>
+              </Pressable>
+            );
+          })}
+        </View>
+      </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0E1A14",
-    padding: 16,
+    paddingHorizontal: 16,
   },
+
   heading: {
     color: "#F5F5DC",
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 12,
+    marginVertical: 16,
   },
+
+  grid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12, // RN >= 0.71
+  },
+
+  // ✅ PERFECT FIT
   dayBox: {
-    width: 62,
-    height: 62,
-    margin: 6,
-    borderRadius: 14,
-    backgroundColor: "#162922",
-    justifyContent: "center",
+    width: BOX_SIZE,
+    height: BOX_SIZE,
+    borderRadius: 16,
     alignItems: "center",
+    justifyContent: "center",
   },
-  activeBox: {
-    backgroundColor: "#1F7A4D",
-    borderWidth: 2,
-    borderColor: "#A6E3C3",
-  },
-  dayText: {
+
+  dayNumber: {
     color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "800",
+    fontSize: 18, // balanced
   },
+
   scoreText: {
-    color: "#C7D2CC",
-    fontSize: 12,
+    color: "#F5F5DC",
+    fontSize: 11,
+    marginTop: 4,
+  },
+
+  selected: {
+    borderWidth: 2,
+    borderColor: "#4AA3DF",
+    backgroundColor: "#162922",
+  },
+
+  completed: {
+    backgroundColor: "#1F7A4D",
+  },
+
+  missed: {
+    backgroundColor: "#7A1F1F",
+  },
+
+  neutral: {
+    backgroundColor: "#2A2A2A",
   },
 });

@@ -1,13 +1,14 @@
 import { Stack } from "expo-router";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+
+import { LanguageProvider } from "../src/context/LanguageContext";
 import { DayProvider } from "../src/context/DayContext";
 
 export default function RootLayout() {
   return (
-    <SafeAreaProvider>
+    <LanguageProvider>
       <DayProvider>
         <Stack screenOptions={{ headerShown: false }} />
       </DayProvider>
-    </SafeAreaProvider>
+    </LanguageProvider>
   );
 }

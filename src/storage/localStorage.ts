@@ -1,33 +1,37 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+const KEY = "DAILY_IBADAT_DATA";
+
 export type DailyIbadatState = Record<string, boolean>;
 export type AllDailyIbadat = Record<number, DailyIbadatState>;
 
-const STORAGE_KEY = "DAILY_IBADAT_BY_DAY";
-
-export async function loadDailyIbadat(
-  day: number
-): Promise<DailyIbadatState> {
-  const raw = await AsyncStorage.getItem(STORAGE_KEY);
-  const data: AllDailyIbadat = raw ? JSON.parse(raw) : {};
-  return data[day] ?? {};
+/**
+ * Load all daily ibadat data
+ */
+export async function loadAllDailyIbadat(): Promise<AllDailyIbadat> {
+  const raw = await AsyncStorage.getItem(KEY);
+  return raw ? JSON.parse(raw) : {};
 }
 
+/**
+ * Save all daily ibadat data (FULL OBJECT)
+ * ✅ This is the missing function causing red errors
+ */
+export async function saveAllDailyIbadat(
+  data: AllDailyIbadat
+): Promise<void> {
+  await AsyncStorage.setItem(KEY, JSON.stringify(data));
+}
+
+/**
+ * Optional helper (safe)
+ * Save single day ibadat
+ */
 export async function saveDailyIbadat(
   day: number,
   state: DailyIbadatState
 ): Promise<void> {
-  const raw = await AsyncStorage.getItem(STORAGE_KEY);
-  const data: AllDailyIbadat = raw ? JSON.parse(raw) : {};
-  data[day] = state;
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-}
-
-export async function loadAllDailyIbadat(): Promise<AllDailyIbadat> {
-  const raw = await AsyncStorage.getItem(STORAGE_KEY);
-  return raw ? JSON.parse(raw) : {};
-}
-
-export function clone<T>(obj: T): T {
-  return JSON.parse(JSON.stringify(obj));
+  const all = await loadAllDailyIbadat();
+  all[day] = state;
+  await saveAllDailyIbadat(all);
 }

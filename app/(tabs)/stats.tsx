@@ -259,3 +259,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 });
+<ScrollView
+  style={styles.container}
+  contentContainerStyle={{ paddingTop: 24 }}
+></ScrollView>

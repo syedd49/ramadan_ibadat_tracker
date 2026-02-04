@@ -1,87 +1,68 @@
-import { generateDailyInsight } from "./insightEngine";
+// /RAMADAN-IBADAT_TRACKER/src/ai/chatEngine.ts
 
-/* 🔐 TYPES */
-export type ChatRole = "user" | "assistant";
+import { fetchQuranAyahFromAPI } from "./quranApi";
 
 export type ChatMessage = {
-  role: ChatRole;
+  role: "user" | "assistant";
   text: string;
 };
 
-/* 🔧 FEATURE FLAG */
-const USE_LOCAL_AI = true;
+export type AISource = "quran" | "hadees";
 
-/* Ollama config */
-const OLLAMA_URL = "http://localhost:11434/api/generate";
-const OLLAMA_MODEL = "phi3:mini";
+/**
+ * VERIFIED KEYWORD → AYAH MAP
+ * (Local fallback – guaranteed)
+ */
+const QURAN_KEYWORD_MAP: Record<string, string> = {
+  sabr: "2:153",
+  dua: "40:60",
+  namaz: "29:45",
+  taqwa: "2:197",
+  iman: "49:15",
+};
 
-/* 🧠 MAIN FUNCTION — THIS WAS MISSING */
+const LOCAL_AYAH_TEXT: Record<string, string> = {
+  "2:153":
+    "يَا أَيُّهَا الَّذِينَ آمَنُوا اسْتَعِينُوا بِالصَّبْرِ وَالصَّلَاةِ ۚ إِنَّ اللَّهَ مَعَ الصَّابِرِينَ\n\n📖 Quran 2:153",
+
+  "40:60":
+    "وَقَالَ رَبُّكُمُ ادْعُونِي أَسْتَجِبْ لَكُمْ\n\n📖 Quran 40:60",
+
+  "29:45":
+    "إِنَّ الصَّلَاةَ تَنْهَىٰ عَنِ الْفَحْشَاءِ وَالْمُنكَرِ\n\n📖 Quran 29:45",
+};
+
 export async function getAIReply(
-  history: ChatMessage[]
+  history: ChatMessage[],
+  source: AISource
 ): Promise<string> {
-  // Fallback if AI off
-  if (!USE_LOCAL_AI) {
-    return fallbackReply(history);
+  const lastUserText =
+    history
+      .filter((m) => m.role === "user")
+      .slice(-1)[0]?.text.toLowerCase() || "";
+
+  const keyword =
+    Object.keys(QURAN_KEYWORD_MAP).find((k) =>
+      lastUserText.includes(k)
+    ) || "";
+
+  await new Promise((r) => setTimeout(r, 700));
+
+  if (source === "quran" && keyword) {
+    const ayahKey = QURAN_KEYWORD_MAP[keyword];
+
+    // 1️⃣ Try REAL API
+    const apiAyah = await fetchQuranAyahFromAPI(ayahKey);
+    if (apiAyah) return apiAyah;
+
+    // 2️⃣ Fallback LOCAL (never fails)
+    return (
+      LOCAL_AYAH_TEXT[ayahKey] ||
+      "Quran ayah temporarily unavailable."
+    );
   }
 
-  try {
-    const prompt = buildChatPrompt(history);
-
-    const res = await fetch(OLLAMA_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: OLLAMA_MODEL,
-        prompt,
-        stream: false,
-      }),
-    });
-
-    if (!res.ok) {
-      throw new Error("AI request failed");
-    }
-
-    const data = await res.json();
-
-    if (typeof data?.response === "string") {
-      return data.response.trim();
-    }
-
-    throw new Error("Invalid AI response");
-  } catch {
-    // ❌ AI fail → SAFE fallback
-    return fallbackReply(history);
-  }
-}
-
-/* 🧠 PROMPT BUILDER */
-function buildChatPrompt(history: ChatMessage[]): string {
-  return `
-You are a gentle Islamic habit coach.
-
-Rules:
-- No fatwa
-- No judgement
-- No Quran/Hadith invention
-- Short, conversational replies
-- Ask one follow-up question
-
-Conversation:
-${history.map(h => `${h.role}: ${h.text}`).join("\n")}
-
-Assistant:
-`.trim();
-}
-
-/* 🔄 FALLBACK (no AI dependency) */
-function fallbackReply(history: ChatMessage[]): string {
-  const lastUser = [...history]
-    .reverse()
-    .find(h => h.role === "user");
-
-  if (!lastUser) {
-    return "Aaj ibadat ke baare me kya mehsoos kar rahe ho?";
-  }
-
-  return `Samajh raha hoon. Isme sabse mushkil part kya lag raha hai?`;
+  return source === "quran"
+    ? "Is lafz par Quran ki ayah abhi configured nahi hai.\n\n📖 Aap sabr, dua, namaz try karein."
+    : "Hadees integration agle step me aayega, InshaAllah.\n\n📚";
 }

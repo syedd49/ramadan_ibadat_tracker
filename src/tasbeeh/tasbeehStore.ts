@@ -1,20 +1,20 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Tasbeeh } from "./tasbeehList";
+import { Tasbeeh, TASBEEH_DATASET } from "./tasbeehDataset";
 
-const KEY = "ACTIVE_TASBEEH";
+const ACTIVE_TASBEEH_KEY = "active_tasbeeh";
 
-export async function setActiveTasbeeh(tasbeeh: Tasbeeh) {
-  await AsyncStorage.setItem(KEY, JSON.stringify(tasbeeh));
+export async function getTasbeehList(): Promise<Tasbeeh[]> {
+  return TASBEEH_DATASET;
 }
 
-export async function getActiveTasbeeh(): Promise<Tasbeeh> {
-  const raw = await AsyncStorage.getItem(KEY);
-  if (raw) return JSON.parse(raw);
+export async function getActiveTasbeeh(): Promise<Tasbeeh | null> {
+  const raw = await AsyncStorage.getItem(ACTIVE_TASBEEH_KEY);
+  return raw ? JSON.parse(raw) : TASBEEH_DATASET[0];
+}
 
-  // default
-  return {
-    id: "allahuakbar",
-    label: "Allahu Akbar",
-    meaning: "Allah sabse bada hai",
-  };
+export async function setActiveTasbeeh(tasbeeh: Tasbeeh) {
+  await AsyncStorage.setItem(
+    ACTIVE_TASBEEH_KEY,
+    JSON.stringify(tasbeeh)
+  );
 }

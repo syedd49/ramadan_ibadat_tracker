@@ -7,7 +7,9 @@ export const SALAH_LIST = [
 ];
 
 export const IBADAT_LIST = [
-  { id: "quran", label: "Qur’an Recitation", score: 20 },
+  { id: "quran", label: "Qur’an Recitation", score: 10 },
   { id: "dua", label: "Dua", score: 10 },
-  { id: "dhikr", label: "Dhikr / Zikr", score: 20 },
+  { id: "dhikr", label: "Dhikr / Zikr", score: 10 },
+  { id: "taraweeh", label: "Taraweeh", score: 10 },
+  { id: "tahajood", label: "Tahajood", score: 10 },
 ];

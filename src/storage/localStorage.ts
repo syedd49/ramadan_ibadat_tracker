@@ -1,9 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { appEvents, EVENTS } from "../events/appEvents";
 
 const KEY = "DAILY_IBADAT_DATA";
 
 export type DailyIbadatState = Record<string, boolean>;
 export type AllDailyIbadat = Record<number, DailyIbadatState>;
+appEvents.emit(EVENTS.STATS_UPDATED);
 
 /**
  * Load all daily ibadat data

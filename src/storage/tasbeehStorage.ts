@@ -1,81 +1,83 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { appEvents, EVENTS } from "../events/appEvents";
 
-const KEY = "TASBEEH_HISTORY";
+const DAILY_KEY_PREFIX = "tasbeeh_daily_";
+const TOTAL_KEY_PREFIX = "tasbeeh_total_";
+const HISTORY_KEY_PREFIX = "tasbeeh_history_";
 
-function todayKey() {
+function todayDate(): string {
   return new Date().toISOString().split("T")[0];
 }
 
-type DayTasbeeh = Record<string, number>;
-type TasbeehHistory = Record<string, DayTasbeeh | number>;
-
-async function loadHistory(): Promise<TasbeehHistory> {
-  const raw = await AsyncStorage.getItem(KEY);
-  return raw ? JSON.parse(raw) : {};
-}
-
-async function saveHistory(data: TasbeehHistory) {
-  await AsyncStorage.setItem(KEY, JSON.stringify(data));
-}
-
-/**
- * 🛠 Normalize old data:
- * - number -> { allahuakbar: number }
- * - object -> unchanged
- */
-function normalizeDayData(
-  dayData: DayTasbeeh | number
-): DayTasbeeh {
-  if (typeof dayData === "number") {
-    return {
-      allahuakbar: dayData, // default tasbeeh
-    };
-  }
-  return dayData;
-}
-
-/** ➕ increment count for specific tasbeeh */
 export async function incrementTasbeeh(
-  tasbeehId: string,
-  count = 1
-) {
-  const date = todayKey();
-  const history = await loadHistory();
-
-  // normalize existing day data if needed
-  const normalized = normalizeDayData(history[date] ?? {});
-  normalized[tasbeehId] =
-    (normalized[tasbeehId] || 0) + count;
-
-  history[date] = normalized;
-  await saveHistory(history);
-}
-
-/** 📿 get today's count for selected tasbeeh */
-export async function getTodayTasbeeh(
   tasbeehId: string
-): Promise<number> {
-  const history = await loadHistory();
-  const dayData = history[todayKey()];
+): Promise<void> {
+  const dailyKey = `${DAILY_KEY_PREFIX}${tasbeehId}`;
+  const totalKey = `${TOTAL_KEY_PREFIX}${tasbeehId}`;
+  const historyKey = `${HISTORY_KEY_PREFIX}${tasbeehId}`;
 
-  if (!dayData) return 0;
+  const daily = Number(await AsyncStorage.getItem(dailyKey)) || 0;
+  const total = Number(await AsyncStorage.getItem(totalKey)) || 0;
 
-  const normalized = normalizeDayData(dayData);
-  return normalized[tasbeehId] || 0;
+  const rawHistory = await AsyncStorage.getItem(historyKey);
+  const history: Record<string, number> = rawHistory
+    ? JSON.parse(rawHistory)
+    : {};
+
+  const today = todayDate();
+  history[today] = (history[today] || 0) + 1;
+
+  await AsyncStorage.multiSet([
+    [dailyKey, String(daily + 1)],
+    [totalKey, String(total + 1)],
+    [historyKey, JSON.stringify(history)],
+  ]);
+
+  /* 🔔 NOTIFY STATS */
+  appEvents.emit(EVENTS.STATS_UPDATED);
 }
 
-/** 📊 get full history (for stats / summary) */
-export async function getTasbeehHistory(): Promise<
-  Record<string, DayTasbeeh>
-> {
-  const history = await loadHistory();
-  const normalizedHistory: Record<string, DayTasbeeh> = {};
+export async function getDailyTasbeeh(tasbeehId: string): Promise<number> {
+  return (
+    Number(
+      await AsyncStorage.getItem(`${DAILY_KEY_PREFIX}${tasbeehId}`)
+    ) || 0
+  );
+}
 
-  Object.keys(history).forEach(date => {
-    normalizedHistory[date] = normalizeDayData(
-      history[date]
-    );
+export async function getTotalTasbeeh(tasbeehId: string): Promise<number> {
+  return (
+    Number(
+      await AsyncStorage.getItem(`${TOTAL_KEY_PREFIX}${tasbeehId}`)
+    ) || 0
+  );
+}
+
+export async function resetDailyTasbeeh(tasbeehId: string): Promise<void> {
+  await AsyncStorage.setItem(
+    `${DAILY_KEY_PREFIX}${tasbeehId}`,
+    "0"
+  );
+
+  /* 🔔 NOTIFY STATS */
+  appEvents.emit(EVENTS.STATS_UPDATED);
+}
+
+export async function getTasbeehLast7Days(
+  tasbeehId: string
+): Promise<Record<string, number>> {
+  const raw = await AsyncStorage.getItem(
+    `${HISTORY_KEY_PREFIX}${tasbeehId}`
+  );
+  if (!raw) return {};
+
+  const history: Record<string, number> = JSON.parse(raw);
+  const days = Object.keys(history).sort().slice(-7);
+
+  const result: Record<string, number> = {};
+  days.forEach(day => {
+    result[day] = history[day];
   });
 
-  return normalizedHistory;
+  return result;
 }

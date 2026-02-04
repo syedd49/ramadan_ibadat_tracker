@@ -17,17 +17,16 @@ import { getDailyAIInsight } from "../../src/ai/aiAdapter";
 import { calculateStreak } from "../../src/ai/streakEngine";
 
 /* -------------------------------------------------- */
-/* 🗓️ TRUE CALENDAR UTILITIES (PERMANENT)             */
+/* 🗓️ TRUE CALENDAR UTILITIES                         */
 /* -------------------------------------------------- */
 
 function getMonthMeta(date: Date) {
   const year = date.getFullYear();
-  const month = date.getMonth(); // 0-based
+  const month = date.getMonth();
 
   const firstDay = new Date(year, month, 1);
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  // JS: Sun=0 → Convert so Mon=0 … Sun=6
   const startOffset = (firstDay.getDay() + 6) % 7;
 
   return { year, month, daysInMonth, startOffset };
@@ -38,35 +37,49 @@ function getMonthMeta(date: Date) {
 type ScoreMap = Record<number, number>;
 
 export default function CalendarTab() {
-  const { day: selectedDay, setDay } = useDay();
+  const {
+    day: selectedDay,
+    today,
+    setDayByCalendar,
+  } = useDay();
+
   const { lang } = useLang();
   const isRTL = lang === "ur";
 
-  const today = new Date();
+  const realToday = new Date();
   const [currentDate, setCurrentDate] = useState(
-    new Date(today.getFullYear(), today.getMonth(), 1)
+    new Date(
+      realToday.getFullYear(),
+      realToday.getMonth(),
+      1
+    )
   );
 
   const { year, month, daysInMonth, startOffset } =
     getMonthMeta(currentDate);
 
   const isCurrentMonth =
-    year === today.getFullYear() &&
-    month === today.getMonth();
+    year === realToday.getFullYear() &&
+    month === realToday.getMonth();
 
   const [scores, setScores] = useState<ScoreMap>({});
   const [aiText, setAiText] = useState("");
 
-  /* 📅 BUILD TRUE 7-COLUMN GRID */
+  /* 📅 GRID */
   const cells = useMemo(() => {
-    const totalCells = Math.ceil(
-      (startOffset + daysInMonth) / 7
-    ) * 7;
+    const totalCells =
+      Math.ceil(
+        (startOffset + daysInMonth) / 7
+      ) * 7;
 
-    return Array.from({ length: totalCells }).map((_, i) => {
-      const d = i - startOffset + 1;
-      return d > 0 && d <= daysInMonth ? d : null;
-    });
+    return Array.from({ length: totalCells }).map(
+      (_, i) => {
+        const d = i - startOffset + 1;
+        return d > 0 && d <= daysInMonth
+          ? d
+          : null;
+      }
+    );
   }, [daysInMonth, startOffset]);
 
   /* 🔹 Load scores */
@@ -79,9 +92,12 @@ export default function CalendarTab() {
         const d = Number(k);
         let score = 0;
 
-        [...SALAH_LIST, ...IBADAT_LIST].forEach(i => {
-          if (all[d]?.[i.id]) score += i.score;
-        });
+        [...SALAH_LIST, ...IBADAT_LIST].forEach(
+          i => {
+            if (all[d]?.[i.id])
+              score += i.score;
+          }
+        );
 
         map[d] = score;
       });
@@ -90,7 +106,7 @@ export default function CalendarTab() {
     })();
   }, [selectedDay]);
 
-  /* 🧠 AI Insight (current month only) */
+  /* 🧠 AI Insight */
   useEffect(() => {
     if (!isCurrentMonth) return;
 
@@ -101,12 +117,18 @@ export default function CalendarTab() {
       const completed: string[] = [];
       const missed: string[] = [];
 
-      [...SALAH_LIST, ...IBADAT_LIST].forEach(i => {
-        if (dayData[i.id]) completed.push(i.id);
-        else missed.push(i.id);
-      });
+      [...SALAH_LIST, ...IBADAT_LIST].forEach(
+        i => {
+          if (dayData[i.id])
+            completed.push(i.id);
+          else missed.push(i.id);
+        }
+      );
 
-      const streak = calculateStreak(all, selectedDay);
+      const streak = calculateStreak(
+        all,
+        selectedDay
+      );
 
       const insight = await getDailyAIInsight({
         day: selectedDay,
@@ -124,23 +146,31 @@ export default function CalendarTab() {
     setCurrentDate(next);
 
     if (
-      next.getFullYear() === today.getFullYear() &&
-      next.getMonth() === today.getMonth()
+      next.getFullYear() ===
+        realToday.getFullYear() &&
+      next.getMonth() === realToday.getMonth()
     ) {
-      setDay(today.getDate());
+      setDayByCalendar(today);
     } else {
-      setDay(1);
+      setDayByCalendar(1);
     }
   };
 
+  /* 🔥 MAIN LOGIC CHANGE */
   const getDayStyle = (d: number) => {
-    if (isCurrentMonth && d === today.getDate())
+    const score = scores[d] ?? 0;
+
+    if (isCurrentMonth && d === today)
       return styles.today;
+
     if (isCurrentMonth && d === selectedDay)
       return styles.selected;
-    if ((scores[d] ?? 0) > 0)
+
+    if (score > 0)
       return styles.completed;
-    return styles.neutral;
+
+    // 🔴 MISSED DAY
+    return styles.missed;
   };
 
   return (
@@ -148,7 +178,9 @@ export default function CalendarTab() {
       <ScrollView style={styles.container}>
         {/* MONTH HEADER */}
         <View style={styles.monthHeader}>
-          <Pressable onPress={() => changeMonth(-1)}>
+          <Pressable
+            onPress={() => changeMonth(-1)}
+          >
             <Text style={styles.nav}>‹</Text>
           </Pressable>
 
@@ -159,42 +191,67 @@ export default function CalendarTab() {
             {year}
           </Text>
 
-          <Pressable onPress={() => changeMonth(1)}>
+          <Pressable
+            onPress={() => changeMonth(1)}
+          >
             <Text style={styles.nav}>›</Text>
           </Pressable>
         </View>
 
-        <AICard text={isCurrentMonth ? aiText : ""} />
+        <AICard
+          text={isCurrentMonth ? aiText : ""}
+        />
 
-        {/* WEEKDAY HEADER — STATIC & TRUE */}
+        {/* WEEK HEADER */}
         <View style={styles.weekRow}>
-          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(
-            d => (
-              <Text key={d} style={styles.weekText}>
-                {d}
-              </Text>
-            )
-          )}
+          {[
+            "Mon",
+            "Tue",
+            "Wed",
+            "Thu",
+            "Fri",
+            "Sat",
+            "Sun",
+          ].map(d => (
+            <Text key={d} style={styles.weekText}>
+              {d}
+            </Text>
+          ))}
         </View>
 
-        {/* TRUE CALENDAR GRID */}
+        {/* GRID */}
         <View style={styles.grid}>
           {cells.map((d, i) => (
             <View key={i} style={styles.cell}>
               {d && (
-                <Pressable onPress={() => setDay(d)}>
+                <Pressable
+                  onPress={() =>
+                    setDayByCalendar(d)
+                  }
+                  disabled={
+                    isCurrentMonth && d > today
+                  }
+                >
                   <View
                     style={[
                       styles.dayBox,
                       getDayStyle(d),
+                      isCurrentMonth &&
+                        d > today && {
+                          opacity: 0.4,
+                        },
                     ]}
                   >
-                    <Text style={styles.dayNumber}>
+                    <Text
+                      style={styles.dayNumber}
+                    >
                       {d}
                     </Text>
 
                     {scores[d] > 0 && (
-                      <Text style={styles.scoreText}>
+                      <Text
+                        style={styles.scoreText}
+                      >
                         {scores[d]}
                       </Text>
                     )}
@@ -256,7 +313,7 @@ const styles = StyleSheet.create({
   },
 
   cell: {
-    width: "14.2857%", // 100 / 7
+    width: "14.2857%",
     alignItems: "center",
     marginBottom: 12,
   },
@@ -293,6 +350,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#162922",
   },
 
-  completed: { backgroundColor: "#1F7A4D" },
-  neutral: { backgroundColor: "#2A2A2A" },
+  completed: {
+    backgroundColor: "#1F7A4D",
+  },
+
+  // 🔴 MISSED DAY STYLE
+  missed: {
+    backgroundColor: "#7A1F1F",
+  },
 });

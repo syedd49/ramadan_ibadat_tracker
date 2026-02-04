@@ -1,110 +1,240 @@
-import { View, Text, StyleSheet, Pressable } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  Alert,
+} from "react-native";
 import { useState, useCallback } from "react";
-import { router, useFocusEffect } from "expo-router";
+import { useFocusEffect, router } from "expo-router";
 
 import { Screen } from "../../src/components/Screen";
 import {
   incrementTasbeeh,
-  getTodayTasbeeh,
+  getDailyTasbeeh,
+  getTotalTasbeeh,
+  resetDailyTasbeeh,
 } from "../../src/storage/tasbeehStorage";
 import { getActiveTasbeeh } from "../../src/tasbeeh/tasbeehStore";
+import {
+  isFavouriteTasbeeh,
+} from "../../src/tasbeeh/tasbeehFavorites";
+import type { Tasbeeh } from "../../src/tasbeeh/tasbeehDataset";
 
 export default function TasbeehScreen() {
-  const [count, setCount] = useState(0);
-  const [tasbeeh, setTasbeeh] = useState<any>(null);
+  const [tasbeeh, setTasbeeh] = useState<Tasbeeh | null>(null);
+  const [daily, setDaily] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [isFav, setIsFav] = useState(false);
 
+  /* ===============================
+     LOAD ACTIVE TASBEEH
+  =============================== */
   useFocusEffect(
     useCallback(() => {
       (async () => {
         const active = await getActiveTasbeeh();
-        setTasbeeh(active);
+        if (!active) return;
 
-        const todayCount = await getTodayTasbeeh(active.id);
-        setCount(todayCount);
+        setTasbeeh(active);
+        setDaily(await getDailyTasbeeh(active.id));
+        setTotal(await getTotalTasbeeh(active.id));
+        setIsFav(await isFavouriteTasbeeh(active.id));
       })();
     }, [])
   );
 
+  /* ===============================
+     INCREMENT
+  =============================== */
   const onPlus = async () => {
     if (!tasbeeh) return;
 
-    setCount(prev => prev + 1);
-    await incrementTasbeeh(tasbeeh.id, 1);
+    setDaily(d => d + 1);
+    setTotal(t => t + 1);
+
+    await incrementTasbeeh(tasbeeh.id);
+  };
+
+  /* ===============================
+     RESET DAILY
+  =============================== */
+  const onResetDaily = () => {
+    if (!tasbeeh || daily === 0) return;
+
+    Alert.alert(
+      "Reset Daily Count?",
+      "Sirf aaj ka tasbeeh reset hoga. Total count safe rahega.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset",
+          style: "destructive",
+          onPress: async () => {
+            await resetDailyTasbeeh(tasbeeh.id);
+            setDaily(0);
+          },
+        },
+      ]
+    );
   };
 
   return (
     <Screen>
-      <View style={styles.container}>
-        {/* View Tasbeeh */}
-        <Pressable
-          style={styles.viewBtn}
-          onPress={() => router.push("/tasbeeh-list")}
-        >
-          <Text style={styles.viewText}>View Tasbeeh →</Text>
-        </Pressable>
+      <View style={styles.root}>
+        {/* ================= TOP BAR ================= */}
+        <View style={styles.topBar}>
+          <Pressable onPress={() => router.push("/tasbeeh-list")}>
+            <Text style={styles.viewText}>View Tasbeeh →</Text>
+          </Pressable>
+        </View>
 
-        {/* Active Tasbeeh */}
-        {tasbeeh && (
-          <>
-            <Text style={styles.tasbeeh}>{tasbeeh.label}</Text>
-            <Text style={styles.meaning}>{tasbeeh.meaning}</Text>
-          </>
-        )}
+        {/* ================= CENTER TASBEEH ================= */}
+        <View style={styles.center}>
+          {tasbeeh ? (
+            <>
+              {isFav && (
+                <Text style={styles.favBadge}>
+                  ⭐ Favourite Tasbeeh
+                </Text>
+              )}
 
-        {/* Count */}
-        <Text style={styles.count}>{count}</Text>
+              <Text style={styles.arabic}>{tasbeeh.arabic}</Text>
+              <Text style={styles.roman}>{tasbeeh.roman}</Text>
+              <Text style={styles.urdu}>{tasbeeh.urdu}</Text>
+              <Text style={styles.meaning}>{tasbeeh.meaning}</Text>
+            </>
+          ) : (
+            <Text style={styles.placeholder}>
+              Tasbeeh select karein
+            </Text>
+          )}
+        </View>
 
-        {/* Plus */}
-        <Pressable style={styles.plus} onPress={onPlus}>
-          <Text style={styles.plusText}>+</Text>
-        </Pressable>
+        {/* ================= BOTTOM CONTROLS ================= */}
+        <View style={styles.bottom}>
+          {/* Count */}
+          <Pressable onLongPress={onResetDaily}>
+            <View style={styles.countRow}>
+              <Text style={styles.daily}>{daily}</Text>
+              <Text style={styles.total}> / {total}</Text>
+            </View>
+          </Pressable>
+
+          {/* Reset */}
+          <Pressable style={styles.resetBtn} onPress={onResetDaily}>
+            <Text style={styles.resetText}>Reset Daily</Text>
+          </Pressable>
+
+          {/* Plus */}
+          <Pressable style={styles.plus} onPress={onPlus}>
+            <Text style={styles.plusText}>+</Text>
+          </Pressable>
+        </View>
       </View>
     </Screen>
   );
 }
 
+/* ===============================
+   STYLES
+=============================== */
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 20,
   },
-  viewBtn: {
-    position: "absolute",
-    top: 20,
-    right: 20,
+
+  /* ---------- TOP ---------- */
+  topBar: {
+    paddingTop: 20,
+    paddingRight: 20,
+    alignItems: "flex-end",
   },
   viewText: {
     color: "#A6E3C3",
     fontSize: 14,
   },
-  tasbeeh: {
-    color: "#1F7A4D",
-    fontSize: 26,
-    fontWeight: "bold",
+
+  /* ---------- CENTER ---------- */
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+  },
+  favBadge: {
+    color: "#FFD700",
+    fontSize: 16,
+    marginBottom: 6,
+  },
+  arabic: {
+    color: "#FFFFFF",
+    fontSize: 38,
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  roman: {
+    color: "#A6E3C3",
+    fontSize: 20,
+    textAlign: "center",
+    marginBottom: 6,
+  },
+  urdu: {
+    color: "#E0E0E0",
+    fontSize: 20,
+    textAlign: "center",
+    marginBottom: 6,
   },
   meaning: {
     color: "#C7D2CC",
-    fontSize: 13,
-    marginBottom: 20,
+    fontSize: 16,
+    textAlign: "center",
+    marginTop: 8,
+    lineHeight: 22,
   },
-  count: {
+  placeholder: {
+    color: "#888",
+    fontSize: 18,
+  },
+
+  /* ---------- BOTTOM ---------- */
+  bottom: {
+    alignItems: "center",
+    paddingBottom: 30,
+  },
+  countRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    marginBottom: 12,
+  },
+  daily: {
     color: "#FFFFFF",
-    fontSize: 48,
-    marginVertical: 20,
+    fontSize: 52,
+  },
+  total: {
+    color: "#A6E3C3",
+    fontSize: 22,
+    marginBottom: 8,
+    marginLeft: 6,
+  },
+  resetBtn: {
+    marginBottom: 16,
+  },
+  resetText: {
+    color: "#FF8A8A",
+    fontSize: 14,
   },
   plus: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
     backgroundColor: "#1F7A4D",
     alignItems: "center",
     justifyContent: "center",
   },
   plusText: {
     color: "#FFFFFF",
-    fontSize: 40,
+    fontSize: 44,
     fontWeight: "bold",
   },
 });

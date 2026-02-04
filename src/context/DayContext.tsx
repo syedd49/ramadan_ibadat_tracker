@@ -1,22 +1,71 @@
-import { createContext, useContext, useState } from "react";
+
+import React, {
+  createContext,
+  useContext,
+  useState,
+} from "react";
 
 type DayContextType = {
   day: number;
-  setDay: (d: number) => void;
+  today: number;
   nextDay: () => void;
   prevDay: () => void;
+  setDayByCalendar: (day: number) => void;
+  isPastDay: boolean;
+  isFutureDay: boolean;
 };
 
-const DayContext = createContext<DayContextType | null>(null);
+const DayContext = createContext<DayContextType | null>(
+  null
+);
 
-export function DayProvider({ children }: { children: any }) {
-  const [day, setDay] = useState<number>(1);
+export function DayProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  // 🔥 today = system date (4 Feb → 4)
+  const today = new Date().getDate();
 
-  const nextDay = () => setDay(d => d + 1);
-  const prevDay = () => setDay(d => (d > 1 ? d - 1 : 1));
+  const [day, setDay] = useState<number>(today);
+
+  /* -----------------------------
+     STEP 2: LOCK FUTURE DAYS
+  --------------------------------*/
+  const nextDay = () => {
+    // ❌ future lock
+    if (day >= today) return;
+    setDay(d => d + 1);
+  };
+
+  /* -----------------------------
+     STEP 3: ALLOW PAST VIEW ONLY
+  --------------------------------*/
+  const prevDay = () => {
+    setDay(d => Math.max(d - 1, 1));
+  };
+
+  const setDayByCalendar = (selectedDay: number) => {
+    // calendar bhi future day select nahi kar sakta
+    if (selectedDay > today) return;
+    setDay(selectedDay);
+  };
+
+  const isPastDay = day < today;
+  const isFutureDay = day > today;
 
   return (
-    <DayContext.Provider value={{ day, setDay, nextDay, prevDay }}>
+    <DayContext.Provider
+      value={{
+        day,
+        today,
+        nextDay,
+        prevDay,
+        setDayByCalendar,
+        isPastDay,
+        isFutureDay,
+      }}
+    >
       {children}
     </DayContext.Provider>
   );
@@ -24,6 +73,10 @@ export function DayProvider({ children }: { children: any }) {
 
 export function useDay() {
   const ctx = useContext(DayContext);
-  if (!ctx) throw new Error("useDay must be used inside DayProvider");
+  if (!ctx) {
+    throw new Error(
+      "useDay must be used inside DayProvider"
+    );
+  }
   return ctx;
 }

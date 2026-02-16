@@ -6,15 +6,21 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-
-    "icon": "/assets/icon.png",
-
-    "plugins": ["expo-router"],
-
+    "icon": "./assets/images/icon.png",
+    "plugins": [
+      "expo-router"
+    ],
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "/assets/adaptive-icon.png",
+        "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#0E1A14"
+      },
+      "package": "com.syedsd49.ramadanibadattracker"
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "df30a22f-da88-4ae6-a17f-e57b4760eee9"
       }
     }
   }

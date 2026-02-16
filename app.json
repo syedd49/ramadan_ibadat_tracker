@@ -3,9 +3,17 @@
     "name": "Ramadan Ibadat Tracker",
     "slug": "ramadan-ibadat-tracker",
     "scheme": "ramadantracker",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+
+    "icon": "/assets/icon.png",
+
     "plugins": ["expo-router"],
+
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "/assets/adaptive-icon.png",
         "backgroundColor": "#0E1A14"
       }
     }

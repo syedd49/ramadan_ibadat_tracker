@@ -26,10 +26,26 @@ function getMonthMeta(date: Date) {
 
   const firstDay = new Date(year, month, 1);
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-
   const startOffset = (firstDay.getDay() + 6) % 7;
 
   return { year, month, daysInMonth, startOffset };
+}
+
+/* -------------------------------------------------- */
+/* 🌙 RAMADAN CONFIG                                  */
+/* -------------------------------------------------- */
+
+// 🔥 Ramadan starts 19 Feb 2026
+const RAMADAN_START = new Date(2026, 1, 19);
+const RAMADAN_DAYS = 30;
+
+function isRamadanDay(year: number, month: number, day: number) {
+  const date = new Date(year, month, day);
+  const diff =
+    (date.getTime() - RAMADAN_START.getTime()) /
+    (1000 * 60 * 60 * 24);
+
+  return diff >= 0 && diff < RAMADAN_DAYS;
 }
 
 /* -------------------------------------------------- */
@@ -65,7 +81,6 @@ export default function CalendarTab() {
   const [scores, setScores] = useState<ScoreMap>({});
   const [aiText, setAiText] = useState("");
 
-  /* 📅 GRID */
   const cells = useMemo(() => {
     const totalCells =
       Math.ceil(
@@ -82,7 +97,7 @@ export default function CalendarTab() {
     );
   }, [daysInMonth, startOffset]);
 
-  /* 🔹 Load scores */
+  /* 🔹 Load scores (RESTORED LOGIC) */
   useEffect(() => {
     (async () => {
       const all = await loadAllDailyIbadat();
@@ -106,7 +121,7 @@ export default function CalendarTab() {
     })();
   }, [selectedDay]);
 
-  /* 🧠 AI Insight */
+  /* 🧠 AI Insight (UNCHANGED) */
   useEffect(() => {
     if (!isCurrentMonth) return;
 
@@ -156,9 +171,11 @@ export default function CalendarTab() {
     }
   };
 
-  /* 🔥 MAIN LOGIC CHANGE */
   const getDayStyle = (d: number) => {
-    const score = scores[d] ?? 0;
+    const score = isCurrentMonth ? scores[d] ?? 0 : 0;
+
+    if (isRamadanDay(year, month, d))
+      return styles.ramadan;
 
     if (isCurrentMonth && d === today)
       return styles.today;
@@ -169,18 +186,14 @@ export default function CalendarTab() {
     if (score > 0)
       return styles.completed;
 
-    // 🔴 MISSED DAY
     return styles.missed;
   };
 
   return (
     <Screen>
       <ScrollView style={styles.container}>
-        {/* MONTH HEADER */}
         <View style={styles.monthHeader}>
-          <Pressable
-            onPress={() => changeMonth(-1)}
-          >
+          <Pressable onPress={() => changeMonth(-1)}>
             <Text style={styles.nav}>‹</Text>
           </Pressable>
 
@@ -191,67 +204,38 @@ export default function CalendarTab() {
             {year}
           </Text>
 
-          <Pressable
-            onPress={() => changeMonth(1)}
-          >
+          <Pressable onPress={() => changeMonth(1)}>
             <Text style={styles.nav}>›</Text>
           </Pressable>
         </View>
 
-        <AICard
-          text={isCurrentMonth ? aiText : ""}
-        />
+        <AICard text={isCurrentMonth ? aiText : ""} />
 
-        {/* WEEK HEADER */}
         <View style={styles.weekRow}>
-          {[
-            "Mon",
-            "Tue",
-            "Wed",
-            "Thu",
-            "Fri",
-            "Sat",
-            "Sun",
-          ].map(d => (
-            <Text key={d} style={styles.weekText}>
-              {d}
-            </Text>
+          {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => (
+            <Text key={d} style={styles.weekText}>{d}</Text>
           ))}
         </View>
 
-        {/* GRID */}
         <View style={styles.grid}>
           {cells.map((d, i) => (
             <View key={i} style={styles.cell}>
               {d && (
                 <Pressable
-                  onPress={() =>
-                    setDayByCalendar(d)
-                  }
-                  disabled={
-                    isCurrentMonth && d > today
-                  }
+                  onPress={() => setDayByCalendar(d)}
+                  disabled={isCurrentMonth && d > today}
                 >
                   <View
                     style={[
                       styles.dayBox,
                       getDayStyle(d),
-                      isCurrentMonth &&
-                        d > today && {
-                          opacity: 0.4,
-                        },
+                      isCurrentMonth && d > today && { opacity: 0.4 },
                     ]}
                   >
-                    <Text
-                      style={styles.dayNumber}
-                    >
-                      {d}
-                    </Text>
+                    <Text style={styles.dayNumber}>{d}</Text>
 
-                    {scores[d] > 0 && (
-                      <Text
-                        style={styles.scoreText}
-                      >
+                    {isCurrentMonth && scores[d] > 0 && (
+                      <Text style={styles.scoreText}>
                         {scores[d]}
                       </Text>
                     )}
@@ -265,10 +249,6 @@ export default function CalendarTab() {
     </Screen>
   );
 }
-
-/* -------------------------------------------------- */
-/* STYLES                                             */
-/* -------------------------------------------------- */
 
 const styles = StyleSheet.create({
   container: { paddingHorizontal: 16 },
@@ -354,8 +334,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#1F7A4D",
   },
 
-  // 🔴 MISSED DAY STYLE
   missed: {
     backgroundColor: "#7A1F1F",
+  },
+
+  ramadan: {
+    backgroundColor: "#FFD700",
   },
 });

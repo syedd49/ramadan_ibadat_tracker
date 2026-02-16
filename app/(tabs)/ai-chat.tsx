@@ -24,7 +24,7 @@ export default function AIChatTab() {
     {
       role: "assistant",
       text:
-        "Assalamu alaikum. Aaj ibadat ke baare me kaisa mehsoos kar rahe ho?",
+        "Assalamu alaikum 🤍\n\nOur Islamic AI Chat feature is currently under development and will be available soon InshaAllah.\nWe are working to provide you with a reliable and beneficial experience.\n\nThank you for your patience and continued support.\n JazakAllah Khair🤍",
     },
   ]);
 

@@ -1,15 +1,36 @@
 import { View, Text, StyleSheet, ScrollView } from "react-native";
 import { useFocusEffect } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useState, useMemo } from "react";
 
 import { loadAllDailyIbadat } from "../../src/storage/localStorage";
 import { SALAH_LIST, IBADAT_LIST } from "../../src/constants/ibadat";
 import { getSmartReminder } from "../../src/ai/smartReminder";
 import { useLang } from "../../src/context/LanguageContext";
 
+// 🔹 Zikr AI
+import { suggestZikr } from "../../src/logic/zikrAI";
+
+function getTimeSlot() {
+  const hour = new Date().getHours();
+
+  if (hour >= 5 && hour < 7) return "afterFajr";
+  if (hour >= 12 && hour < 14) return "afterDhuhr";
+  if (hour >= 16 && hour < 18) return "afterAsr";
+  if (hour >= 18 && hour < 20) return "afterMaghrib";
+  if (hour >= 20 && hour < 23) return "afterIsha";
+  if (hour >= 2 && hour < 5) return "tahajjud";
+
+  return "any";
+}
+
 export default function HomeScreen() {
   const [aiMessage, setAiMessage] = useState("");
-  const { t } = useLang(); // ✅ language hook
+  const { t } = useLang();
+
+  const zikr = useMemo(() => {
+    const timeSlot = getTimeSlot();
+    return suggestZikr(timeSlot)[0];
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -59,7 +80,6 @@ export default function HomeScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingTop: 24 }}>
-      {/* 🔹 Translated Text */}
       <Text style={styles.heading}>{t("home_greeting")}</Text>
 
       <Text style={styles.subHeading}>
@@ -94,6 +114,45 @@ export default function HomeScreen() {
 
         <Text style={styles.ameen}>Aameen 🤲</Text>
       </View>
+
+      {/* 🤍 TODAY'S ZIKR */}
+      {zikr && (
+        <View style={styles.zikrCard}>
+          <Text style={styles.zikrTitle}>🤍 Aaj ka Zikr</Text>
+          <Text style={styles.zikrArabic}>{zikr.arabic}</Text>
+          <Text style={styles.zikrRoman}>{zikr.roman}</Text>
+          <Text style={styles.zikrMeaning}>{zikr.meaning}</Text>
+        </View>
+      )}
+
+      {/* 🌙 SEHRI DUA */}
+      <View style={styles.duaCard}>
+        <Text style={styles.duaTitle}>🌙 Sehri Ki Dua</Text>
+        <Text style={styles.duaArabic}>
+          وَبِصَوْمِ غَدٍ نَّوَيْتُ مِنْ شَهْرِ رَمَضَانَ
+        </Text>
+        <Text style={styles.duaRoman}>
+          Wa bisawmi ghadin nawaiytu min shahri Ramadan
+        </Text>
+        <Text style={styles.duaMeaning}>
+          I intend to keep the fast for tomorrow in the month of Ramadan.
+        </Text>
+      </View>
+
+      {/* 🌅 IFTAR DUA */}
+      <View style={styles.duaCard}>
+        <Text style={styles.duaTitle}>🌅 Iftar Ki Dua</Text>
+        <Text style={styles.duaArabic}>
+          اللَّهُمَّ إِنِّي لَكَ صُمْتُ وَبِكَ آمَنْتُ وَعَلَيْكَ تَوَكَّلْتُ وَعَلَى رِزْقِكَ أَفْطَرْتُ
+        </Text>
+        <Text style={styles.duaRoman}>
+          Allahumma inni laka sumtu wa bika aamantu wa ‘alayka tawakkaltu wa ‘ala rizqika aftartu
+        </Text>
+        <Text style={styles.duaMeaning}>
+          O Allah! I fasted for You, I believe in You, I put my trust in You, and I break my fast with Your sustenance.
+        </Text>
+      </View>
+
     </ScrollView>
   );
 }
@@ -135,6 +194,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#162922",
     padding: 18,
     borderRadius: 16,
+    marginBottom: 20,
   },
   noteTitle: {
     color: "#F5F5DC",
@@ -154,5 +214,65 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textAlign: "right",
     marginTop: 6,
+  },
+  zikrCard: {
+    backgroundColor: "#13251C",
+    padding: 20,
+    borderRadius: 18,
+    marginBottom: 20,
+  },
+  zikrTitle: {
+    color: "#E8F5E9",
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 12,
+  },
+  zikrArabic: {
+    color: "#FFFFFF",
+    fontSize: 26,
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  zikrRoman: {
+    color: "#C8E6C9",
+    fontSize: 15,
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  zikrMeaning: {
+    color: "#A5D6A7",
+    fontSize: 14,
+    textAlign: "center",
+  },
+
+  // 🌙 DUA STYLES
+  duaCard: {
+    backgroundColor: "#1A2F26",
+    padding: 20,
+    borderRadius: 18,
+    marginBottom: 20,
+  },
+  duaTitle: {
+    color: "#FFD700",
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 12,
+  },
+  duaArabic: {
+    color: "#FFFFFF",
+    fontSize: 22,
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  duaRoman: {
+    color: "#C8E6C9",
+    fontSize: 14,
+    textAlign: "center",
+    marginBottom: 6,
+  },
+  duaMeaning: {
+    color: "#A5D6A7",
+    fontSize: 13,
+    textAlign: "center",
   },
 });

@@ -19,7 +19,35 @@ import {
 import { SALAH_LIST, IBADAT_LIST } from "../../src/constants/ibadat";
 import { Screen } from "../../src/components/Screen";
 
+// 🔹 Zikr AI integrations (NEW)
+import { suggestZikr } from "../../src/logic/zikrAI";
+import { sendPostPrayerZikrNotification } from "../../src/logic/zikrNotifications";
+import { recordZikrRecitation } from "../../src/storage/zikrStats";
+
 type DayState = Record<string, boolean>;
+
+/**
+ * Map Salah IDs → Prayer names
+ * (must match SALAH_LIST ids)
+ */
+function mapSalahToPrayer(
+  salahId: string
+): "Fajr" | "Dhuhr" | "Asr" | "Maghrib" | "Isha" | null {
+  switch (salahId) {
+    case "fajr":
+      return "Fajr";
+    case "dhuhr":
+      return "Dhuhr";
+    case "asr":
+      return "Asr";
+    case "maghrib":
+      return "Maghrib";
+    case "isha":
+      return "Isha";
+    default:
+      return null;
+  }
+}
 
 export default function TrackerTab() {
   const { t, lang } = useLang();
@@ -38,8 +66,44 @@ export default function TrackerTab() {
     }, [day])
   );
 
+  /**
+   * 🔹 TOGGLE IBADAT / SALAH
+   * Zikr AI hooks ONLY for Salah when toggled ON
+   */
   const toggle = (id: string) => {
-    setState(prev => ({ ...prev, [id]: !prev[id] }));
+    setState(prev => {
+      const newValue = !prev[id];
+
+      // 🔹 Only when marking TRUE
+      if (newValue) {
+        const prayer = mapSalahToPrayer(id);
+
+        // 🔸 Only Salah triggers Zikr AI
+        if (prayer) {
+          // 1️⃣ Notification
+          sendPostPrayerZikrNotification(prayer);
+
+          // 2️⃣ Pick AI zikr & record stats
+          const zikr = suggestZikr(
+            prayer === "Fajr"
+              ? "afterFajr"
+              : prayer === "Dhuhr"
+              ? "afterDhuhr"
+              : prayer === "Asr"
+              ? "afterAsr"
+              : prayer === "Maghrib"
+              ? "afterMaghrib"
+              : "afterIsha"
+          )[0];
+
+          if (zikr) {
+            recordZikrRecitation(zikr.id);
+          }
+        }
+      }
+
+      return { ...prev, [id]: newValue };
+    });
   };
 
   const save = async () => {

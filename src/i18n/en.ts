@@ -1,12 +1,14 @@
+import { IBADAT_LIST } from "../constants/ibadat";
+
 export const en = {
   home_greeting: "Assalamu Alaikum 🌙",
-  home_subtitle: "Aaj ki ibadat ka safar yahin se shuru hota hai",
+  home_subtitle: "Ramadan Mubarak! Track your ibadat and stay motivated this Ramadan.",
   ai_reminder: "AI Smart Reminder",
 
   note_title: "Note",
   note_line_1: "Yeh app sirf aapko ibadat ki taraf motivate aur yaad-dihani ke liye hai.",
-  note_line_2: "Beshak ALLAH hi hamari ibadaton ko qubool farmane wale hain. ALLAH PAAK numbers ko nahi, balki aapki niyyat, ikhlas aur koshish ko dekh kar ajar deta hai.",
-  note_line_3: "ALLAH TA’ALA aapki har jayez dua, zikr, Qur’an, namaz, sadqa aur roza qubool farmaye aur is koshish ko sadaqah-e-jariyah bana de.",
+  note_line_2: "Beshak ALLAH hi hamari ibadaton ko qubool farmane wala hain. ALLAH PAAK numbers ko nahi, balki aapki niyyat, ikhlas aur koshish ko dekh kar ajar deta hai.",
+  note_line_3: "ALLAH TA’ALA aapki har jayez Dua, Zikr, Qur’an, Namaz, Sadqa aur Roza Qubool Farmaye aur is Koshish ko Sadaqah-e-Jariyah bana de.",
 
 
 tracker_heading: "Daily Ibadat Tracker",
@@ -22,6 +24,9 @@ salah_isha: "Isha",
 ibadat_quran: "Qur'an",
 ibadat_dhikr: "Zikr",
 ibadat_dua: "Dua",
+ibadat_tahajood: "Tahajood",
+ibadat_roza: "Roza",
+ibadat_taraweeh: "Taraweeh",
 stats_heading: "Stats",
 stats_done: "Progress",
 stats_missed: "Missed",
